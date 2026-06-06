@@ -147,6 +147,23 @@ function getContextInfo(messageContent) {
   return {};
 }
 
+// Extract a text snippet from a quoted (replied-to) message so the gateway
+// can inject reply context into the agent prompt.
+function getQuotedText(contextInfo) {
+  const quoted = contextInfo?.quotedMessage;
+  if (!quoted || typeof quoted !== 'object') return null;
+  if (quoted.conversation) return quoted.conversation;
+  if (quoted.extendedTextMessage?.text) return quoted.extendedTextMessage.text;
+  if (quoted.imageMessage) return quoted.imageMessage.caption || '[image]';
+  if (quoted.videoMessage) return quoted.videoMessage.caption || '[video]';
+  if (quoted.documentMessage) return quoted.documentMessage.caption || quoted.documentMessage.fileName || '[document]';
+  if (quoted.audioMessage || quoted.pttMessage) return '[audio]';
+  if (quoted.stickerMessage) return '[sticker]';
+  if (quoted.locationMessage) return '[location]';
+  if (quoted.contactMessage) return '[contact]';
+  return null;
+}
+
 mkdirSync(SESSION_DIR, { recursive: true });
 
 // Build LID → phone reverse map from session files (lid-mapping-{phone}.json)
@@ -322,31 +339,7 @@ async function startSocket() {
       const quotedParticipant = normalizeWhatsAppId(contextInfo?.participant || '') || null;
       const quotedRemoteJid = normalizeWhatsAppId(contextInfo?.remoteJid || '') || null;
       const hasQuotedMessage = !!contextInfo?.quotedMessage;
-
-      // Extract quoted message text for reply context injection
-      let quotedText = '';
-      if (contextInfo?.quotedMessage) {
-        const qm = contextInfo.quotedMessage;
-        if (qm.conversation) {
-          quotedText = qm.conversation;
-        } else if (qm.extendedTextMessage?.text) {
-          quotedText = qm.extendedTextMessage.text;
-        } else if (qm.imageMessage) {
-          quotedText = qm.imageMessage.caption || '[image]';
-        } else if (qm.videoMessage) {
-          quotedText = qm.videoMessage.caption || '[video]';
-        } else if (qm.documentMessage) {
-          quotedText = qm.documentMessage.caption || '[document]';
-        } else if (qm.audioMessage || qm.pttMessage) {
-          quotedText = '[audio]';
-        } else if (qm.stickerMessage) {
-          quotedText = '[sticker]';
-        } else if (qm.locationMessage) {
-          quotedText = '[location]';
-        } else if (qm.contactMessage) {
-          quotedText = '[contact]';
-        }
-      }
+      const quotedText = getQuotedText(contextInfo);
 
       // Extract message body
       let body = '';
